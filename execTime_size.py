@@ -14,7 +14,7 @@ from sklearn.decomposition import PCA, KernelPCA, FastICA
 from sklearn.datasets import make_blobs
 
 from sklearn.pipeline import Pipeline
-from similarity_learning import bilinearSimilarityLearner, l1LinearClassifier
+import similarity_learning as sl
 import myIOFuncs as ioFuncs
 from time import time
 
@@ -22,7 +22,7 @@ from time import time
 
 
 #%%
-ridgeSimLearner = bilinearSimilarityLearner(algorithm= 'closed-form')
+ridgeSimLearner = sl.bilinearSimilarityLearner(algorithm= 'closed-form')
 sizes = [100*i for i in range(1,31, 6)]
 dims = [10*i for i in range(1,21, 4)]
 nbReps = 100

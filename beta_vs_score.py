@@ -6,11 +6,12 @@ This script plots learning curves of the beta parameter of our algorithm
 
 import numpy as np
 from matplotlib import pyplot as plt
-from similarity_learning import bilinearSimilarityLearner, l1LinearClassifier
+import similarity_learning as sl
 from sklearn.model_selection import validation_curve, RepeatedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.datasets import load_breast_cancer, make_blobs
 
+#%%
 X, y = load_breast_cancer(return_X_y = True)
 #X, y = make_blobs(n_samples= 1000, centers= 2)
 
@@ -18,8 +19,8 @@ X, y = load_breast_cancer(return_X_y = True)
 betaRange = 10.0**np.arange(-6, 6)
 lambda_reg = 1
 
-estimator = Pipeline(steps = [('similarity', bilinearSimilarityLearner()), 
-                              ('classifier', l1LinearClassifier(solver='cvxpy', lambda_reg= lambda_reg))]) # by default, the used algorithm is ours
+estimator = Pipeline(steps = [('similarity', sl.bilinearSimilarityLearner()), 
+                              ('classifier', sl.l1LinearClassifier(solver='cvxpy', lambda_reg= lambda_reg))]) # by default, the used algorithm is ours
 
 train_scores, test_scores = validation_curve(estimator, X, y, param_name="similarity__beta_reg",
                                              param_range= betaRange, cv= RepeatedKFold(n_repeats= 1), n_jobs= -1)
