@@ -1,0 +1,26 @@
+RVML (Regressive Virtual Metric Learning)
+=========================================
+
+Python implementation of RVML presented in NIPS 2015:
+
+Regressive Virtual Metric Learning,
+Michaël Perrot and Amaury Habrard, NIPS 2015.
+
+Features
+--------
+
+We provide here a python implementation of RVML (for both linear and kernelized cases) along with utilities functions used to compute Virtual Points (for both class based and Optimal Transport based approaches).
+
+Dependencies 
+------------
+
+- Python 3.4 with numpy (best compiled against an optimized BLAS library), scipy, sklearn
+
+- Optimal Transport Toolbox freely avaible on Remi Flamary's website (included, requires cvxpy and matplotlib)
+Optimal Transport for Domain Adaptation
+N. Courty, R. Flamary, D. Tuia, and A. Rakotomamonjy
+
+Installation
+------------
+
+Once the dependencies are met, you can run example.py to have a basic example on the splice dataset.
