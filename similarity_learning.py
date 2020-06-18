@@ -73,7 +73,7 @@ class bilinearSimilarityLearner(BaseEstimator, TransformerMixin):
             reg = beta_reg*cvx.sum_squares(A)
                 
             prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
-            prob.solve(solver= 'mosek')
+            prob.solve(solver= 'MOSEK')
             return np.array(A.value)
         
         """ our algorithm"""
@@ -157,7 +157,28 @@ class RVMLSimilarityLearner(BaseEstimator, TransformerMixin):
         else:
             L = X.T.dot(np.linalg.inv(X.dot(X.T) + l*n*np.identity(n))).dot(V)
         return L     
-        
+
+from sklearn.metrics.pairwise import cosine_similarity
+class cosineSimilarityLearner(BaseEstimator, TransformerMixin):  
+    """An example of classifier"""
+
+    def __init__(self, gamma= 1, beta_reg= 1e-3, is_similarity= True, algorithm= 'closed-form'):
+        """
+        Called when initializing the classifier
+        """
+        self.landmarks_ = np.array([], dtype= np.float64)
+    
+    def fit(self, X, y):
+        self.landmarks_ = X.copy()
+        return self
+    
+    def transform(self, X, landmarks= None):
+        if landmarks == None:
+            landmarks = self.landmarks_.copy()
+        return cosine_similarity(X, self.landmarks_)
+        #simMat = computeBilinSimMat(X, landmarks, np.eye)
+        # return simMat if self.is_similarity else -simMat
+    
 
 """linear SVM with hinge loss and l1 penalization"""
 class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
@@ -200,24 +221,25 @@ class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
             reg = lambda_reg*cvx.norm1(alphaVar)
             prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
             try:
-                prob.solve(solver = 'mosek')
+                prob.solve(solver = 'MOSEK')
                 alpha = np.array(alphaVar.value).flatten()
             except :
                 print("Warning: MOSEK solver failed, switching to SGD...")
                 solverArg = "sgd"
         
         # stochastic gradient descent: for large data sets        
-        elif solverArg == "sgd":
+        if solverArg == "sgd":
 #            print("sgd used")
             sgdLinClassifier= SGDClassifier(loss= 'hinge', penalty= 'l1', 
-                                            alpha= lambda_reg, tol= 1e-30, verbose = False, 
-                                            learning_rate= 'optimal', eta0= 1e-6, shuffle= True,
-                                            max_iter= np.ceil(10**6 / len(y)), # empirical rule of thumb, given in the sklearn documentation
-                                            average= 10,
+                                            alpha= lambda_reg, #tol= 1e-30, verbose = False, 
+                                            # learning_rate= 'optimal', eta0= 1e-6, shuffle= True,
+                                             max_iter= np.ceil(1e6 / len(y)), # empirical rule of thumb, given in the sklearn documentation
+                                            # average= 10,
                                             )
             
             sgdLinClassifier.fit(X, y)
             alpha = sgdLinClassifier.coef_.flatten()
+        # print(lambda_reg)
         
         return alpha
     
