@@ -69,11 +69,11 @@ class bilinearSimilarityLearner(BaseEstimator, TransformerMixin):
         if algorithm == 'sllc':
             X_signed = y[:, np.newaxis]*X
             A = cvx.Variable((d,d))
-            loss = cvx.sum(cvx.pos(1-X_signed*A*cvx.sum(X_signed, axis= 0).T/(n*gamma)))/n
+            loss = cvx.sum(cvx.pos(1-X_signed@A@cvx.sum(X_signed, axis= 0).T/(n*gamma)))/n
             reg = beta_reg*cvx.sum_squares(A)
                 
             prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
-            prob.solve(solver= cvx.MOSEK)
+            prob.solve(solver= 'mosek')
             return np.array(A.value)
         
         """ our algorithm"""
@@ -196,11 +196,11 @@ class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
         if solverArg == "cvxpy":
 #            print("cvxpy used")
             alphaVar = cvx.Variable(X.shape[1])
-            loss = cvx.sum(cvx.pos(1 - y[:, np.newaxis]*X*alphaVar))
+            loss = cvx.sum(cvx.pos(1 - (y[:, np.newaxis]*X)@alphaVar))
             reg = lambda_reg*cvx.norm1(alphaVar)
             prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
             try:
-                prob.solve(solver = cvx.MOSEK)
+                prob.solve(solver = 'mosek')
                 alpha = np.array(alphaVar.value).flatten()
             except :
                 print("Warning: MOSEK solver failed, switching to SGD...")

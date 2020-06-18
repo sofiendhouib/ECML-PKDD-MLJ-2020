@@ -47,10 +47,13 @@ def plot_learning_curve(train_sizes, train_scores, test_scores, ylim= None, titl
     plt.legend(loc="best")
     return plt
 
-def plotWithStd(xArray, yArray, axis):
+def plotWithConf(xArray, yArray, axis, interval= [0.05, 0.95]):
     meanYArray= np.mean(yArray, axis=  axis)
-    stdYArray= np.std(yArray, axis= axis)
+    # stdYArray= np.std(yArray, axis= axis)
+    quantile1Array = np.quantile(yArray, q= interval[0], axis= axis)
+    quantile2Array = np.quantile(yArray, q= interval[1], axis= axis)
     plt.plot(xArray, meanYArray)
-    plt.fill_between(xArray, meanYArray - stdYArray, meanYArray + stdYArray, alpha= 0.3)
+    # plt.fill_between(xArray, meanYArray - stdYArray, meanYArray + stdYArray, alpha= 0.3)
+    plt.fill_between(xArray, quantile1Array, quantile2Array, alpha= 0.3)
     return None
 
