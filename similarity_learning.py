@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.linear_model.base import LinearClassifierMixin, SparseCoefMixin
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sys import path as pathSys
-
+from sklearn.svm import LinearSVC
 
 """This import is to include the RVML algorithm (https://perso.univ-st-etienne.fr/pem82055/RegressiveVirtualMetricLearning.html)"""
 pathSys.append('./RVML/') # path where RVML folder is stored (Available for download on the above URL)
@@ -26,9 +26,12 @@ class bilinearSimilarityLearner(BaseEstimator, TransformerMixin):
         self.paramMat_ = np.array([], dtype= np.float64)
         self.landmarks_ = np.array([], dtype= np.float64)
         self.landmarks_labels_ = np.array([], dtype= np.float64)
+        self.beta_reg = beta_reg
+        self.algorithm = algorithm
+        self.is_similarity = is_similarity
+        self.gamma = gamma
         self.set_params(**{'gamma': gamma, 'beta_reg': beta_reg, 'is_similarity': is_similarity, 'algorithm': algorithm})
         self.epsilon_ = -np.inf
-        self.is_similarity = is_similarity
 
 
     def fit(self, X, y):
@@ -67,14 +70,20 @@ class bilinearSimilarityLearner(BaseEstimator, TransformerMixin):
         """ Implementation of SLLC"""
         
         if algorithm == 'sllc':
-            X_signed = y[:, np.newaxis]*X
-            A = cvx.Variable((d,d))
-            loss = cvx.sum(cvx.pos(1-X_signed@A@cvx.sum(X_signed, axis= 0).T/(n*gamma)))/n
-            reg = beta_reg*cvx.sum_squares(A)
+            # X_signed = y[:, np.newaxis]*X
+            # A = cvx.Variable((d,d))
+            # loss = cvx.sum(cvx.pos(1-X_signed@A@cvx.sum(X_signed, axis= 0).T/(n*gamma)))/n
+            # reg = cvx.sum_squares(A)
                 
-            prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
-            prob.solve(solver= 'MOSEK')
-            return np.array(A.value)
+            # prob = cvx.Problem(objective= cvx.Minimize(loss + beta_reg*reg))
+            # prob.solve(solver= 'MOSEK')
+            # print("similarity solved !")
+            # return np.array(A.value)
+            mu = np.dot(X.T, y)/n
+            X_kron = np.kron(mu, X)
+            linSvc = LinearSVC(loss= 'hinge', C= 1/beta_reg, fit_intercept= False, max_iter= 10**4)
+            linSvc.fit(X_kron/gamma, y)
+            return linSvc.coef_.reshape((d,d), order= 'F')
         
         """ our algorithm"""
         if algorithm == 'closed-form':
@@ -108,6 +117,11 @@ class RVMLSimilarityLearner(BaseEstimator, TransformerMixin):
         self.paramL_ = np.array([], dtype= np.float64)
         self.paramV_ = np.array([], dtype= np.float64)
         self.paramX_ = np.array([], dtype= np.float64)
+        self.l = l
+        self.VP = VP
+        self.eta = eta
+        self.reg = reg
+        self.kernel = kernel
         self.set_params(**{'l':l, 'VP': VP, 'eta': eta, 'reg': reg, 'kernel': kernel})
         self.sigmaSq= None
 
@@ -162,11 +176,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 class cosineSimilarityLearner(BaseEstimator, TransformerMixin):  
     """An example of classifier"""
 
-    def __init__(self, gamma= 1, beta_reg= 1e-3, is_similarity= True, algorithm= 'closed-form'):
+    def __init__(self):
         """
         Called when initializing the classifier
         """
         self.landmarks_ = np.array([], dtype= np.float64)
+        # self.set_params()
     
     def fit(self, X, y):
         self.landmarks_ = X.copy()
@@ -185,6 +200,8 @@ class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
     
     def __init__(self, lambda_reg= 1e-3, solver= 'cvxpy'):
 
+        self.lambda_reg = lambda_reg
+        self.solver = solver
         self.set_params(**{'lambda_reg': lambda_reg, 'solver': solver})
         self.coef_ = np.array([])
         self.classes_ = np.array([])
@@ -217,11 +234,11 @@ class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
         if solverArg == "cvxpy":
 #            print("cvxpy used")
             alphaVar = cvx.Variable(X.shape[1])
-            loss = cvx.sum(cvx.pos(1 - (y[:, np.newaxis]*X)@alphaVar))
-            reg = lambda_reg*cvx.norm1(alphaVar)
-            prob = cvx.Problem(objective= cvx.Minimize(loss + reg))
+            loss = cvx.sum(cvx.pos(1 - (y[:, None]*X)@alphaVar))
+            reg = cvx.norm1(alphaVar)
+            prob = cvx.Problem(objective= cvx.Minimize(loss + lambda_reg*reg))
             try:
-                prob.solve(solver = 'MOSEK')
+                prob.solve(solver = 'SCS')
                 alpha = np.array(alphaVar.value).flatten()
             except :
                 print("Warning: MOSEK solver failed, switching to SGD...")
@@ -230,17 +247,17 @@ class l1LinearClassifier(BaseEstimator, LinearClassifierMixin, SparseCoefMixin):
         # stochastic gradient descent: for large data sets        
         if solverArg == "sgd":
 #            print("sgd used")
-            sgdLinClassifier= SGDClassifier(loss= 'hinge', penalty= 'l1', 
+            sgdLinClassifier= SGDClassifier(loss= 'hinge', penalty= 'l1', fit_intercept= False,
                                             alpha= lambda_reg, #tol= 1e-30, verbose = False, 
                                             # learning_rate= 'optimal', eta0= 1e-6, shuffle= True,
-                                             max_iter= np.ceil(1e6 / len(y)), # empirical rule of thumb, given in the sklearn documentation
-                                            # average= 10,
+                                            # max_iter= np.ceil(1e6 / len(y)), # empirical rule of thumb, given in the sklearn documentation
+                                            # verbose= 10,# average= 10,
                                             )
             
             sgdLinClassifier.fit(X, y)
             alpha = sgdLinClassifier.coef_.flatten()
         # print(lambda_reg)
-        
+        # print("classifier solved !")
         return alpha
     
 #%% functions used above

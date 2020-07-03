@@ -46,8 +46,8 @@ datasetDict ={
                 # 'svmguide1': 'svmguide1.train',
                 # 'cod-rna': 'cod-rna.train',
                 'breast': 'breast.data',
-                # 'ionosphere': 'ionosphere.data',
-                # 'pima': 'pima.data',
+                'ionosphere': 'ionosphere.data',
+                'pima': 'pima.data',
             }
 
 #%%
@@ -57,16 +57,16 @@ datasetDict ={
         * classifier: l1 linear classifier
 """
 
-l1LinClf = sl.l1LinearClassifier(solver= 'cvxpy')
+l1LinClf = sl.l1LinearClassifier()
 lambdaRange = np.logspace(2,-3,6)
-l1LinClfParamGrid = {"linear__lambda_reg": lambdaRange}
+l1LinClfParamGrid = {"linear__lambda_reg": lambdaRange, 'linear__solver': ['sgd']}
 
 # 
 metricLearnersDict= {
                     'cosine': sl.cosineSimilarityLearner(),
                     'closed-form': sl.bilinearSimilarityLearner(algorithm= 'closed-form'),
-                    'RVML': sl.RVMLSimilarityLearner(kernel= 'rbf', VP= 'classBased'),
                     'SLLC': sl.bilinearSimilarityLearner(algorithm= 'sllc'),
+                    'RVML': sl.RVMLSimilarityLearner(kernel= 'rbf', VP= 'classBased'),
                     'LMNN': LMNN(),
                     'ITML': ITML_Supervised(), 
                 }
@@ -79,12 +79,12 @@ estimatorsDict= {}
 for algoName in metricLearnersDict.keys():
     estimatorsDict[algoName] = {"estimator": pipelineConstructor(algoName)}
 
-estimatorsDict["cosine"]["param_grid"] = {}
+estimatorsDict["cosine"]["param_grid"] = {**l1LinClfParamGrid}
 estimatorsDict["closed-form"]["param_grid"] = {"closed-form__beta_reg": np.logspace(4,-7,12), **l1LinClfParamGrid}
-estimatorsDict["SLLC"]["param_grid"] = {"SLLC__beta_reg": np.logspace(-2,-7,6), "SLLC__gamma": np.logspace(-2,-7,6), **l1LinClfParamGrid}
+estimatorsDict["SLLC"]["param_grid"] = {"SLLC__beta_reg": np.logspace(3,-7,11), "SLLC__gamma": [1], **l1LinClfParamGrid}
 estimatorsDict["RVML"]["param_grid"] = {"RVML__l": [10**p for p in range(-5,2)], **l1LinClfParamGrid} #exactly like in the authors' code
-estimatorsDict["LMNN"]["param_grid"] = {}
-estimatorsDict["ITML"]["param_grid"] = {**{"ITML__gamma": np.logspace(-4,4,9)}}
+estimatorsDict["LMNN"]["param_grid"] = {"LMNN__init": ['auto'], **l1LinClfParamGrid}
+estimatorsDict["ITML"]["param_grid"] = {"ITML__gamma": np.logspace(-4,4,9), "ITML__random_state": [0], **l1LinClfParamGrid}
 
 postprocess = False
 #%%
@@ -93,10 +93,9 @@ postprocess = False
     loop over data sets and different algorithms, with 100 runs for each combination
 """
 if not postprocess:
-    nbSplits = 1# 
-    resDict = {}
+    nbSplits = 100 # 100 train-test splits for data sets with no predefined train-test splits 
     for (dataName, dataFile) in list(datasetDict.items()):
-        resDict[dataName] = {}
+        resDict = dict(zip(estimatorsDict.keys(), [None]*len(estimatorsDict.keys())))
         # =============================================================================
         #  Loading the data set: train and test sets   
         # =============================================================================
@@ -143,24 +142,28 @@ if not postprocess:
             # add number of constraints to ITML
             if algoName == "ITML":
                 try:
-                    algorithmDict["param_grid"]["ITML__num_constraints"] = len(X_train)
+                    algorithmDict["param_grid"]["ITML__num_constraints"] = [len(X_train)]
                 except NameError:
                     algorithmDict["param_grid"]["ITML__num_constraints"] = [int(0.7*len(X))]
             # =============================================================================
             #   Performe a grid search on train/validation, then depending whether there are predefined train/test, use them or average over 100 runs
             # =============================================================================
-        
-            gridSearcher = model_selection.GridSearchCV(estimator= Pipeline(dataTransformingPipeline.steps + algorithmDict["estimator"].steps), 
+            
+            estimator = Pipeline(dataTransformingPipeline.steps + algorithmDict["estimator"].steps)
+  
+            gridSearcher = model_selection.GridSearchCV(estimator= estimator, 
                                                             param_grid= algorithmDict["param_grid"],
                                                             n_jobs= -1, verbose= 0, cv= model_selection.StratifiedKFold(n_splits= 5))
             
             if algoName == "ITML":
-                cvResult = model_selection.cross_validate(gridSearcher, X, (y==1).astype(np.int16), n_jobs= 1, cv= testCV, verbose= 2)
+                cvResult = model_selection.cross_validate(gridSearcher, X, (y==1).astype(np.int16), n_jobs= 1, cv= testCV, verbose= 10)
             else:
-                cvResult = model_selection.cross_validate(gridSearcher, X, y, n_jobs= 1, cv= testCV, verbose= 0)
-            resDict[dataName][algoName] = cvResult
-            # Choose a name to save cross validaiton result5555555555555555555
-    with open('results.pickle', 'wb') as handle:
-        pickle.dump(resDict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                cvResult = model_selection.cross_validate(gridSearcher, X, y, n_jobs= 1, cv= testCV, verbose= 3)
+            resDict[algoName] = cvResult
+            # Choose a name to save cross validaiton result
+        with open('results_%s.pickle'%dataName, 'wb') as handle:
+            pickle.dump(resDict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 else:
-    resultsDict = pickle.load('results.pickle')
+    resDict = {}
+    for dataName in datasetDict.keys():
+        resDict[dataName] = pickle.load('results_%s.pickle'%dataName)
