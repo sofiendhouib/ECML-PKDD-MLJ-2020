@@ -42,9 +42,9 @@ dataPath = "data/" # where data is stored
 
 datasetDict ={  
                 # 'blobs': 'blobs.data', # a toy set, to check if the script works well
-                # 'splice': 'splice.train',
-                # 'svmguide1': 'svmguide1.train',
-                # 'cod-rna': 'cod-rna.train',
+                'splice': 'splice.train',
+                'svmguide1': 'svmguide1.train',
+                'cod-rna': 'cod-rna.train',
                 'breast': 'breast.data',
                 'ionosphere': 'ionosphere.data',
                 'pima': 'pima.data',
@@ -54,48 +54,36 @@ datasetDict ={
 """
     Defining different pipelines for each metric learning algorithm:
         * metric learning algorithm: transforms the data after learning the metric
-        * classifier: l1 linear classifier
+        * classifier: 3 Nearest Neighbors classifier
 """
-
-l1LinClf = sl.l1LinearClassifier()
-lambdaRange = np.logspace(2,-3,6)
-l1LinClfParamGrid = {"linear__lambda_reg": lambdaRange, 'linear__solver': ['sgd']}
 
 # 
 metricLearnersDict= {
-                    'cosine': sl.cosineSimilarityLearner(),
-                    'cosine_noKPCA': sl.cosineSimilarityLearner(),
+                    # 'cosine': sl.cosineSimilarityLearner(),
                     'closed-form': sl.bilinearSimilarityLearner(algorithm= 'closed-form'),
-                    'closed-form_noKPCA': sl.bilinearSimilarityLearner(algorithm= 'closed-form'),
-                    'SLLC': sl.bilinearSimilarityLearner(algorithm= 'sllc'),
-                    'RVML': sl.RVMLSimilarityLearner(kernel= 'rbf', VP= 'classBased'),
-                    'LMNN': LMNN(),
-                    'LMNN_noKPCA': LMNN(),
-                    'ITML': ITML_Supervised(), 
-                    'ITML_noKPCA': ITML_Supervised(), 
+                    # 'SLLC': sl.bilinearSimilarityLearner(algorithm= 'sllc'),
+                    # 'RVML': sl.RVMLSimilarityLearner(kernel= 'rbf', VP= 'classBased'),
+                    # 'LMNN': LMNN(),
+                    # 'LMNN_noKPCA': LMNN(),
+                    # 'ITML': ITML_Supervised(), 
+                    # 'ITML_noKPCA': ITML_Supervised(), 
                 }
+
+
 def pipelineConstructor(algoName):
-    classifierStep = ('linear', l1LinClf)
-    return Pipeline(steps = [(algoName, metricLearnersDict[algoName]), classifierStep])
+    return Pipeline(steps = [(algoName, metricLearnersDict[algoName]), ("NN", KNeighborsClassifier(n_neighbors= 3))])
      
     
 estimatorsDict= {}
 for algoName in metricLearnersDict.keys():
     estimatorsDict[algoName] = {"estimator": pipelineConstructor(algoName)}
 
-# estimatorsDict["cosine"]["param_grid"] = {**l1LinClfParamGrid}
-estimatorsDict["cosine_noKPCA"]["param_grid"] = {**l1LinClfParamGrid}
-
-# estimatorsDict["closed-form"]["param_grid"] = {"closed-form__beta_reg": np.logspace(4,-7,12), **l1LinClfParamGrid}
-# estimatorsDict["closed-form_noKPCA"]["param_grid"] = {"closed-form_noKPCA__beta_reg": np.logspace(4,-7,12), **l1LinClfParamGrid}
-
-# estimatorsDict["SLLC"]["param_grid"] = {"SLLC__beta_reg": np.logspace(3,-7,11), "SLLC__gamma": [1], **l1LinClfParamGrid}
-# estimatorsDict["RVML"]["param_grid"] = {"RVML__l": [10**p for p in range(-5,2)], **l1LinClfParamGrid} #exactly like in the authors' code
-# estimatorsDict["LMNN"]["param_grid"] = {"LMNN__init": ['auto'], **l1LinClfParamGrid}
-estimatorsDict["LMNN_noKPCA"]["param_grid"] = {"LMNN_noKPCA__init": ['auto'], **l1LinClfParamGrid}
-
-# estimatorsDict["ITML"]["param_grid"] = {"ITML__gamma": np.logspace(-4,4,9), "ITML__random_state": [0], **l1LinClfParamGrid}
-estimatorsDict["ITML_noKPCA"]["param_grid"] = {"ITML_noKPCA__gamma": np.logspace(-4,4,9), "ITML_noKPCA__random_state": [0], **l1LinClfParamGrid}
+# estimatorsDict["cosine"]["param_grid"] = {}
+estimatorsDict["closed-form"]["param_grid"] = {"closed-form__beta_reg": np.logspace(4,-7,12)}
+# estimatorsDict["SLLC"]["param_grid"] = {"SLLC__beta_reg": np.logspace(3,-7,11), "SLLC__gamma": [1]}
+# estimatorsDict["RVML"]["param_grid"] = {"RVML__l": [10**p for p in range(-5,2)]} #exactly like in the authors' code
+# estimatorsDict["LMNN"]["param_grid"] = {"LMNN__init": ['auto']}
+# estimatorsDict["ITML"]["param_grid"] = {"ITML__gamma": np.logspace(-4,4,9), "ITML__random_state": [0]}
 
 
 postprocess = True
@@ -138,15 +126,7 @@ if not postprocess:
         
     #    estimatorsDict["ITML"]["estimator"].steps[0] = ITML_Supervised(num_constraints= int(0.7*len(X))) # special case of ITML: number of constraints = number of landmarks
         for algoName in list(estimatorsDict.keys()):
-            if algoName == 'RVML' or algoName.endswith("noKPCA"):
-                dataTransformingPipeline = Pipeline([('minMaxScaler', minMaxScaler)])                
-            else:
-                nKPCA = 4*X.shape[1] if X.shape[1]<8 else 3*X.shape[1]
-                kernelPCA = KernelPCA(kernel= 'rbf', n_components= nKPCA, gamma= 0.5/sigmaSquared)
-                dataTransformingPipeline = Pipeline([
-                                            ('kernel_pca',  kernelPCA),
-                                            ('minMaxScaler', minMaxScaler),
-                                            ])
+            dataTransformingPipeline = Pipeline([('minMaxScaler', minMaxScaler)])                
         
             print("data set: %s, algorithm: %s" %(dataName, algoName))
             algorithmDict = estimatorsDict[algoName]
@@ -157,11 +137,6 @@ if not postprocess:
                     algorithmDict["param_grid"]["ITML__num_constraints"] = [len(X_train)]
                 except NameError:
                     algorithmDict["param_grid"]["ITML__num_constraints"] = [int(0.7*len(X))]
-            if algoName == "ITML_noKPCA":
-                try:
-                    algorithmDict["param_grid"]["ITML_noKPCA__num_constraints"] = [len(X_train)]
-                except NameError:
-                    algorithmDict["param_grid"]["ITML_noKPCA__num_constraints"] = [int(0.7*len(X))]
                 
             # =============================================================================
             #   Performe a grid search on train/validation, then depending whether there are predefined train/test, use them or average over 100 runs
@@ -173,13 +148,13 @@ if not postprocess:
                                                             param_grid= algorithmDict["param_grid"],
                                                             n_jobs= -1, verbose= 0, cv= model_selection.StratifiedKFold(n_splits= 5))
             
-            if algoName.startswith("ITML"):
+            if algoName == "ITML":
                 cvResult = model_selection.cross_validate(gridSearcher, X, (y==1).astype(np.int16), n_jobs= 1, cv= testCV, verbose= 10)
             else:
                 cvResult = model_selection.cross_validate(gridSearcher, X, y, n_jobs= 1, cv= testCV, verbose= 3)
             # resDict[algoName] = cvResult
             # Choose a name to save cross validaiton result
-            with open('%s_%s.pickle'%(dataName,algoName), 'wb') as handle:
+            with open('%s_%s_3NN.pickle'%(dataName,algoName), 'wb') as handle:
                 pickle.dump(cvResult, handle, protocol=pickle.HIGHEST_PROTOCOL)
 else:
     # resDict = {}
@@ -194,8 +169,8 @@ else:
     from pandas import DataFrame
     df = DataFrame(index=  estimatorsDict.keys(), columns= datasetDict.keys())
     for dataName in datasetDict.keys():
-        for algoName in estimatorsDict.keys():
-            with open('%s_%s.pickle'%(dataName,algoName), 'rb') as handle:
+        for algoName in ["closed-form"]:#estimatorsDict.keys():
+            with open('%s_%s_3NN.pickle'%(dataName,algoName), 'rb') as handle:
                 cvResult = pickle.load(handle)
             df.loc[algoName][dataName] = np.mean(cvResult["test_score"])
                 
